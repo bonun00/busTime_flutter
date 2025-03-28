@@ -2,12 +2,10 @@ plugins {
     id "com.android.application"
     id "kotlin-android"
 
-
-    // AGP 버전을 명시
-//    id("com.android.application") version "7.3.1"
-    // Kotlin 버전도 명시 가능 (옵션)
-//    id("kotlin-android") version "1.8.22"
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+//    id("com.android.application") version "8.1.0" // AGP 버전을 8.1.0으로 업데이트
+//    id("kotlin-android") version "1.8.22" // Kotlin 버전은 필요에 따라 업데이트
+//    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+//    id("dev.flutter.flutter-gradle-plugin")
     id "dev.flutter.flutter-gradle-plugin"
 }
 

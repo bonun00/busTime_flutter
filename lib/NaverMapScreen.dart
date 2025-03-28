@@ -2,62 +2,162 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:stomp_dart_client/stomp_dart_client.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class NaverMapScreen extends StatefulWidget {
   @override
   _NaverMapScreenState createState() => _NaverMapScreenState();
 }
 
-class _NaverMapScreenState extends State<NaverMapScreen> {
+class _NaverMapScreenState extends State<NaverMapScreen> with SingleTickerProviderStateMixin {
   StompClient? _stompClient;
   late NaverMapController _mapController;
   Set<NMarker> _busMarkers = {};
+  List<dynamic> _busList = [];
+  String? _selectedMarkerId;
+  NCircleOverlay? _selectedCircleOverlay;
+  NMultipartPathOverlay? _pathOverlay;
+  bool _isLoading = true;
+  late AnimationController _animationController;
+  bool _isListExpanded = true;
+  bool _isMyLocationEnabled=false;
 
   @override
   void initState() {
     super.initState();
     _connectStomp();
+    _animationController = AnimationController(
+      vsync: this,
+      duration: Duration(milliseconds: 300),
+    );
+    _requestLocationPermission();
+  }
+  // 위치 권한 요청 메서드 추가
+  Future<void> _requestLocationPermission() async {
+    var status = await Permission.location.request();
+    if (status.isGranted) {
+      setState(() {
+        _isMyLocationEnabled = true;
+      });
+    }
+  }
+  // 내 위치 토글 메서드 추가
+  void _toggleMyLocation() {
+    setState(() {
+      _isMyLocationEnabled = !_isMyLocationEnabled;
+    });
+
+    if (_isMyLocationEnabled) {
+      _mapController.setLocationTrackingMode(NLocationTrackingMode.follow);
+
+
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.location_on, color: Colors.white),
+              SizedBox(width: 10),
+              Expanded(child: Text('내 위치 추적이 켜졌습니다')),
+            ],
+          ),
+          backgroundColor: Color(0xFF388E3C),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          margin: EdgeInsets.all(10),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    } else {
+      _mapController.setLocationTrackingMode(NLocationTrackingMode.none);
+    }
   }
 
+
   void _connectStomp() {
-    // STOMP 클라이언트 생성 및 활성화
+    setState(() {
+      _isLoading = true;
+    });
+
     _stompClient = StompClient(
       config: StompConfig(
-        url: 'ws://10.0.2.2:1111/ws', // 백엔드 STOMP 엔드포인트
+        url: 'ws://10.0.2.2:1111/ws',
         onConnect: _onConnect,
-        onWebSocketError: (error) => print("[ERROR] WebSocket 에러: $error"),
-        onStompError: (StompFrame frame) =>
-            print("[ERROR] STOMP 에러: ${frame.body}"),
-        onDisconnect: (frame) => print("[DEBUG] STOMP 연결 종료됨"),
+        onWebSocketError: (error) {
+          print("[ERROR] WebSocket 에러: $error");
+          _showErrorSnackBar("서버 연결에 실패했습니다. 다시 시도해주세요.");
+          setState(() {
+            _isLoading = false;
+          });
+        },
+        onStompError: (StompFrame frame) {
+          print("[ERROR] STOMP 에러: ${frame.body}");
+          _showErrorSnackBar("데이터 수신 중 오류가 발생했습니다.");
+          setState(() {
+            _isLoading = false;
+          });
+        },
+        onDisconnect: (frame) {
+          print("[DEBUG] STOMP 연결 종료됨: ${frame.headers}");
+          setState(() {
+            _isLoading = false;
+          });
+        },
       ),
     );
-
     _stompClient!.activate();
     print("[DEBUG] STOMP 연결 시도 중...");
   }
 
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(Icons.error_outline, color: Colors.white),
+            SizedBox(width: 10),
+            Expanded(child: Text(message)),
+          ],
+        ),
+        backgroundColor: Colors.red[700],
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        margin: EdgeInsets.all(10),
+        duration: Duration(seconds: 4),
+      ),
+    );
+  }
+
   void _onConnect(StompFrame frame) {
-    print("[DEBUG] STOMP 연결 성공");
-    // "/topic/masan" 구독 시작
+    print("[DEBUG] STOMP 연결 성공: ${frame.headers}");
+
     _stompClient!.subscribe(
       destination: '/topic/masan',
       callback: (StompFrame frame) {
         if (frame.body != null) {
-          print("[DEBUG] 수신된 데이터: ${frame.body}");
           try {
-            // JSON 파싱 (백엔드의 BusLocationDTO에 맞춰 vehicleId, latitude, longitude를 포함)
             final decodedData = jsonDecode(frame.body!);
-            _updateBusMarkers(decodedData);
+            _updateBusData(decodedData);
+            setState(() {
+              _isLoading = false;
+            });
           } catch (e) {
             print("[ERROR] 데이터 파싱 에러: $e");
+            setState(() {
+              _isLoading = false;
+            });
           }
+        } else {
+          print("[DEBUG] 수신된 데이터가 없습니다.");
+          setState(() {
+            _isLoading = false;
+          });
         }
       },
     );
   }
 
-  void _updateBusMarkers(dynamic data) {
-    // 데이터가 List 형태라고 가정 (또는 최상위 객체 내 busLocations 배열일 경우에 맞게 수정)
+  void _updateBusData(dynamic data) {
     List<dynamic> busLocations;
     if (data is List) {
       busLocations = data;
@@ -68,21 +168,37 @@ class _NaverMapScreenState extends State<NaverMapScreen> {
       return;
     }
 
+    setState(() {
+      _busList = busLocations;
+    });
+
     Set<NMarker> newMarkers = {};
     for (var bus in busLocations) {
-      // 각 버스 데이터에서 위도, 경도, 차량 ID 추출
       double lat = double.tryParse(bus['latitude'].toString()) ?? 0.0;
       double lng = double.tryParse(bus['longitude'].toString()) ?? 0.0;
       String vehicleId = bus['vehicleId']?.toString() ?? 'unknown';
+      String busNumber = bus['busNumber']?.toString() ?? '';
 
+      // 마커를 생성하고 버스 번호를 포함한 캡션 추가
       final marker = NMarker(
         id: vehicleId,
         position: NLatLng(lat, lng),
+        caption: NOverlayCaption(
+          text: busNumber,
+          textSize: 14,
+          color: Colors.white,
+          haloColor: Colors.black,
+        ),
+        icon: NOverlayImage.fromAssetImage('assets/images/bus_marker.png'),
       );
 
-      // 터치 이벤트 처리 (원하는 경우 추가 기능 구현)
       marker.setOnTapListener((overlay) {
-        print("[DEBUG] 터치된 버스 - ID: $vehicleId, 위치: ($lat, $lng)");
+        setState(() {
+          _selectedMarkerId = vehicleId;
+        });
+        _moveCameraTo(lat, lng);
+        _updateBorderOverlay(lat, lng);
+        _showBusInfo(bus);
       });
 
       newMarkers.add(marker);
@@ -93,46 +209,522 @@ class _NaverMapScreenState extends State<NaverMapScreen> {
     });
 
     if (_mapController != null) {
-      // 지도에서 기존 오버레이 제거 후 새 마커 추가
       _mapController.clearOverlays();
       _mapController.addOverlayAll(_busMarkers);
-      print("[DEBUG] 지도에 ${_busMarkers.length}개의 마커 추가됨.");
+      if (_selectedCircleOverlay != null) {
+        _mapController.addOverlay(_selectedCircleOverlay!);
+      }
     }
+  }
+
+  void _showBusInfo(dynamic bus) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 10,
+              spreadRadius: 2,
+            ),
+          ],
+        ),
+        padding: EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Color(0xFF388E3C),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.directions_bus,
+                    color: Colors.white,
+                    size: 28,
+                  ),
+                ),
+                SizedBox(width: 15),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "${bus['busNumber'] ?? '알 수 없음'}번 버스",
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF388E3C),
+                      ),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      "차량 ID: ${bus['vehicleId'] ?? '알 수 없음'}",
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            SizedBox(height: 20),
+            _buildInfoRow(Icons.location_on, "현재 위치", "${bus['nodenm'] ?? '정보 없음'}"),
+            SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Color(0xFF388E3C),
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                minimumSize: Size(double.infinity, 50),
+              ),
+              child: Text("닫기"),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoRow(IconData icon, String label, String value) {
+    return Row(
+      children: [
+        Container(
+          padding: EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: Color(0xFFE8F5E9),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, color: Color(0xFF388E3C), size: 18),
+        ),
+        SizedBox(width: 10),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[600],
+              ),
+            ),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  void _moveCameraTo(double lat, double lng) {
+    _mapController.updateCamera(
+      NCameraUpdate.fromCameraPosition(
+        NCameraPosition(
+          target: NLatLng(lat, lng),
+          zoom: 16,
+        ),
+      ),
+    );
+  }
+
+  void _updateBorderOverlay(double lat, double lng) {
+    // 원형 오버레이 타입만 제거
+    _mapController.clearOverlays(type: NOverlayType.circleOverlay);
+
+    _selectedCircleOverlay = NCircleOverlay(
+      id: "selected_circle",
+      center: NLatLng(lat, lng),
+      radius: 30,
+      color: Colors.red.withOpacity(0.3),
+      outlineColor: Colors.red,
+      outlineWidth: 2,
+    );
+
+    _mapController.addOverlay(_selectedCircleOverlay!);
+  }
+
+  void _toggleListExpanded() {
+    setState(() {
+      _isListExpanded = !_isListExpanded;
+      if (_isListExpanded) {
+        _animationController.forward();
+      } else {
+        _animationController.reverse();
+      }
+    });
   }
 
   @override
   void dispose() {
     _stompClient?.deactivate();
+    _animationController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.green[50], // 연한 초록색 배경
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        title: Text(
-          "네이버 지도 - 실시간 마산 버스 위치",
-          style: TextStyle(fontWeight: FontWeight.bold),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        title: Row(
+          children: [
+            Container(
+              padding: EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: Color(0xFF388E3C),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                Icons.location_on,
+                color: Colors.white,
+                size: 18,
+              ),
+            ),
+            SizedBox(width: 10),
+            Text(
+              '실시간 버스 위치',
+              style: TextStyle(
+                color: Colors.black87,
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+              ),
+            ),
+          ],
         ),
-        backgroundColor: Color(0xff388e3c), // AppBar 초록색
-        foregroundColor: Colors.white,
-      ),
-      body: NaverMap(
-        options: NaverMapViewOptions(
-          initialCameraPosition: NCameraPosition(
-            target: NLatLng(37.5665, 126.9780), // 서울 좌표 (필요에 따라 변경)
-            zoom: 14,
+        actions: [
+          IconButton(
+            icon: Icon(
+              Icons.refresh,
+              color: Colors.black54,
+            ),
+            onPressed: () {
+              setState(() {
+                _isLoading = true;
+              });
+              _connectStomp();
+            },
           ),
-          locationButtonEnable: true,
-          // 필요한 추가 옵션들을 넣을 수 있습니다.
+        ],
+        leading: IconButton(
+          icon: Icon(
+            Icons.arrow_back,
+            color: Colors.black54,
+          ),
+          onPressed: () {
+            Navigator.pop(context);
+          },
         ),
-        onMapReady: (controller) {
-          _mapController = controller;
-          // 초기 오버레이 추가 (없으면 빈 상태)
-          _mapController.addOverlayAll(_busMarkers);
-          print("[DEBUG] 지도 준비 완료, 초기 마커 수: ${_busMarkers.length}");
-        },
+      ),
+      body: Stack(
+        children: [
+          // 네이버 지도
+          NaverMap(
+            options: NaverMapViewOptions(
+              initialCameraPosition: NCameraPosition(
+                target: NLatLng(35.3088233, 128.5185542),
+                zoom: 14,
+              ),
+              locationButtonEnable: false,
+              contentPadding: EdgeInsets.only(bottom: _isListExpanded ? 250 : 60),
+              scaleBarEnable: false,
+            ),
+            onMapReady: (controller) {
+              _mapController = controller;
+              _mapController.addOverlayAll(_busMarkers);
+              if (_selectedCircleOverlay != null) {
+                _mapController.addOverlay(_selectedCircleOverlay!);
+              }
+
+// 위치 추적 모드는 맵 컨트롤러를 통해 설정
+              if (_isMyLocationEnabled) {
+                _mapController.setLocationTrackingMode(NLocationTrackingMode.follow);
+              } else {
+                _mapController.setLocationTrackingMode(NLocationTrackingMode.none);
+              }
+
+
+
+            },
+          ),
+
+          // 로딩 표시기
+          if (_isLoading)
+            Container(
+              color: Colors.black.withOpacity(0.3),
+              child: Center(
+                child: Card(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Padding(
+                    padding: EdgeInsets.all(20),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF388E3C)),
+                        ),
+                        SizedBox(height: 16),
+                        Text(
+                          "버스 정보를 불러오는 중...",
+                          style: TextStyle(
+                            color: Color(0xFF388E3C),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+          // 버스 목록 토글 버튼
+          Positioned(
+            right: 16,
+            bottom: _isListExpanded ? 250 : 16,
+            child: FloatingActionButton(
+              onPressed: _toggleListExpanded,
+              backgroundColor: Color(0xFF388E3C),
+              child: Icon(
+                _isListExpanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_up,
+                color: Colors.white,
+              ),
+              mini: true,
+            ),
+          ),
+          Positioned(
+            right: 16,
+            bottom: _isListExpanded ? 300 : 66, // 목록 토글 버튼보다 위에 배치
+            child: FloatingActionButton(
+              onPressed: _toggleMyLocation,
+              backgroundColor: _isMyLocationEnabled ? Color(0xFF388E3C) : Colors.white,
+              child: Icon(
+                Icons.my_location,
+                color: _isMyLocationEnabled ? Colors.white : Color(0xFF388E3C),
+              ),
+              mini: true,
+              elevation: 3,
+            ),
+          ),
+
+          // 버스 목록 패널
+          AnimatedPositioned(
+            duration: Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+            left: 0,
+            right: 0,
+            bottom: _isListExpanded ? 0 : -190,
+            height: 250,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black26,
+                    blurRadius: 10,
+                    spreadRadius: 0,
+                    offset: Offset(0, -2),
+                  ),
+                ],
+              ),
+              child: Column(
+                children: [
+                  // 버스 목록 헤더
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [Color(0xFF388E3C), Color(0xFF2E7D32)],
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                      ),
+                      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.directions_bus, color: Colors.white),
+                        SizedBox(width: 10),
+                        Text(
+                          "실시간 버스 목록",
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                        Spacer(),
+                        Container(
+                          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            "${_busList.length}대 운행 중",
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF388E3C),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // 버스 목록
+                  Expanded(
+                    child: _busList.isEmpty
+                        ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.info_outline,
+                            size: 40,
+                            color: Colors.grey[400],
+                          ),
+                          SizedBox(height: 10),
+                          Text(
+                            "실시간 버스 정보가 없습니다.",
+                            style: TextStyle(
+                              color: Colors.grey[600],
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                        : ListView.builder(
+                      padding: EdgeInsets.symmetric(vertical: 8),
+                      itemCount: _busList.length,
+                      itemBuilder: (context, index) {
+                        var bus = _busList[index];
+                        String vehicleId = bus['vehicleId']?.toString() ?? 'unknown';
+                        String busNumber = bus['busNumber']?.toString() ?? '';
+                        double lat = double.tryParse(bus['latitude'].toString()) ?? 0.0;
+                        double lng = double.tryParse(bus['longitude'].toString()) ?? 0.0;
+
+                        bool isSelected = vehicleId == _selectedMarkerId;
+
+                        return Card(
+                          margin: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          elevation: isSelected ? 4 : 1,
+                          shadowColor: isSelected ? Color(0xFF388E3C).withOpacity(0.3) : Colors.grey.withOpacity(0.2),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            side: BorderSide(
+                              color: isSelected ? Color(0xFF388E3C) : Colors.transparent,
+                              width: isSelected ? 2 : 0,
+                            ),
+                          ),
+                          child: InkWell(
+                            onTap: () {
+                              setState(() {
+                                _selectedMarkerId = vehicleId;
+                              });
+                              _moveCameraTo(lat, lng);
+                              _updateBorderOverlay(lat, lng);
+                            },
+                            borderRadius: BorderRadius.circular(12),
+                            child: Padding(
+                              padding: const EdgeInsets.all(12.0),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 40,
+                                    height: 40,
+                                    decoration: BoxDecoration(
+                                      color: isSelected ? Color(0xFF388E3C) : Color(0xFFE8F5E9),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        busNumber,
+                                        style: TextStyle(
+                                          color: isSelected ? Colors.white : Color(0xFF388E3C),
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          "${bus['routenm'] ?? '정보 없음'}",
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                            color: Colors.black87,
+                                          ),
+                                        ),
+                                        SizedBox(height: 4),
+                                        Row(
+                                          children: [
+                                            Icon(
+                                              Icons.location_on,
+                                              size: 12,
+                                              color: Colors.grey[600],
+                                            ),
+                                            SizedBox(width: 4),
+                                            Expanded(
+                                              child: Text(
+                                                "차량 번호 $vehicleId",
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  color: Colors.grey[600],
+                                                ),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Icon(
+                                    Icons.arrow_forward_ios,
+                                    color: Color(0xFF388E3C),
+                                    size: 14,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

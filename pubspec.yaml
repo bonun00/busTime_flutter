@@ -1,6 +1,6 @@
 name: develoment
 description: "A new Flutter project."
-publish_to: 'none' # 프로젝트를 pub.dev에 퍼블리시하지 않습니다.
+
 
 version: 1.0.0+1
 
@@ -11,14 +11,23 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.8
-  flutter_naver_map: ^1.3.0
+  flutter_naver_map: ^1.2.0
   stomp_dart_client: ^2.1.3
   dio: ^5.8.0+1
+  google_fonts: ^6.2.1
+  permission_handler: ^11.4.0
+
+
+
+
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
 
+
 flutter:
   uses-material-design: true
+  assets:
+    - assets/images/bus_marker.png

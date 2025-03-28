@@ -1,0 +1,2 @@
+/Users/gubonhun/develoment/BusTime/android/app/.cxx/Debug/2x5r6y6h/armeabi-v7a/CMakeFiles/edit_cache.dir
+/Users/gubonhun/develoment/BusTime/android/app/.cxx/Debug/2x5r6y6h/armeabi-v7a/CMakeFiles/rebuild_cache.dir
