@@ -7,6 +7,7 @@ import '../widgets/route_card.dart';
 import '../widgets/live_tracking.dart';
 import '../widgets/info_card.dart';
 import '../widgets/section_title.dart';
+import '../pages/favorite_page.dart';
 
 class MainPage extends StatefulWidget {
   @override
@@ -163,6 +164,31 @@ class _MainPageState extends State<MainPage> {
             ? Color(0xFF1976D2) : Color(0xFF388E3C),
         elevation: 0,
         // 왼쪽: 로고 + 텍스트
+        actions: [
+          IconButton(
+            icon: Icon(Icons.star),
+            onPressed: () async{
+              final result=await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => FavoritesScreen()),
+              );
+
+
+    // 즐겨찾기 화면에서 경로를 선택했을 때 처리
+    if (result != null && result is Map<String, dynamic>) {
+      // 선택한 경로로 검색 설정
+      setState(() {
+        // 선택한 노선 타입으로 변경
+        _currentRouteType = result['routeType'];
+
+        // 선택한 출발지/도착지 설정
+        _selectedDeparture = result['departure'];
+        _selectedArrival = result['arrival'];
+      });
+    }
+            },
+          ),
+        ],
         title: Row(
           children: [
             Container(
@@ -211,6 +237,7 @@ class _MainPageState extends State<MainPage> {
               },
               onToggleRouteType: _toggleRouteType,
               onSearch: _fetchSchedulesByName,
+              busApiService:_busApiService,
             ),
 
             // (2) 메인 콘텐츠
@@ -222,6 +249,7 @@ class _MainPageState extends State<MainPage> {
                   // 검색 결과 섹션
                   if (_showResults) ...[
                     SearchResultsSection(
+                      busApiService: _busApiService,
                       currentRouteType: _currentRouteType,
                       selectedDeparture: _selectedDeparture,
                       selectedArrival: _selectedArrival,

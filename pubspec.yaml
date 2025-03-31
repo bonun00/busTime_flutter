@@ -16,6 +16,11 @@ dependencies:
   dio: ^5.8.0+1
   google_fonts: ^6.2.1
   permission_handler: ^11.4.0
+  # 로컬 데이터 저장을 위한 패키지
+  shared_preferences: ^2.2.0  # 간단한 key-value 저장소
+
+  # UUID 생성을 위한 패키지 (즐겨찾기 항목의 고유 ID 생성용)
+  uuid: ^3.0.7
 
 
 
@@ -31,3 +36,4 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/bus_marker.png
+    - assets/images/big-location-marker.svg

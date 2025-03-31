@@ -20,7 +20,6 @@ class _NaverMapScreenState extends State<NaverMapScreen> with SingleTickerProvid
   bool _isLoading = true;
   late AnimationController _animationController;
   bool _isListExpanded = true;
-  bool _isMyLocationEnabled=false;
 
   @override
   void initState() {
@@ -32,47 +31,11 @@ class _NaverMapScreenState extends State<NaverMapScreen> with SingleTickerProvid
     );
     _requestLocationPermission();
   }
-  // 위치 권한 요청 메서드 추가
+
+  // 위치 권한 요청 메서드
   Future<void> _requestLocationPermission() async {
     var status = await Permission.location.request();
-    if (status.isGranted) {
-      setState(() {
-        _isMyLocationEnabled = true;
-      });
-    }
   }
-  // 내 위치 토글 메서드 추가
-  void _toggleMyLocation() {
-    setState(() {
-      _isMyLocationEnabled = !_isMyLocationEnabled;
-    });
-
-    if (_isMyLocationEnabled) {
-      _mapController.setLocationTrackingMode(NLocationTrackingMode.follow);
-
-
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              Icon(Icons.location_on, color: Colors.white),
-              SizedBox(width: 10),
-              Expanded(child: Text('내 위치 추적이 켜졌습니다')),
-            ],
-          ),
-          backgroundColor: Color(0xFF388E3C),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          margin: EdgeInsets.all(10),
-          duration: Duration(seconds: 2),
-        ),
-      );
-    } else {
-      _mapController.setLocationTrackingMode(NLocationTrackingMode.none);
-    }
-  }
-
 
   void _connectStomp() {
     setState(() {
@@ -132,7 +95,7 @@ class _NaverMapScreenState extends State<NaverMapScreen> with SingleTickerProvid
     print("[DEBUG] STOMP 연결 성공: ${frame.headers}");
 
     _stompClient!.subscribe(
-      destination: '/topic/masan',
+      destination: '/topic/chilwon',
       callback: (StompFrame frame) {
         if (frame.body != null) {
           try {
@@ -442,7 +405,7 @@ class _NaverMapScreenState extends State<NaverMapScreen> with SingleTickerProvid
                 target: NLatLng(35.3088233, 128.5185542),
                 zoom: 14,
               ),
-              locationButtonEnable: false,
+              locationButtonEnable: true, // 네이버 맵의 기본 위치 버튼 활성화
               contentPadding: EdgeInsets.only(bottom: _isListExpanded ? 250 : 60),
               scaleBarEnable: false,
             ),
@@ -452,16 +415,17 @@ class _NaverMapScreenState extends State<NaverMapScreen> with SingleTickerProvid
               if (_selectedCircleOverlay != null) {
                 _mapController.addOverlay(_selectedCircleOverlay!);
               }
+              final locationOverlay = _mapController.getLocationOverlay();
 
-// 위치 추적 모드는 맵 컨트롤러를 통해 설정
-              if (_isMyLocationEnabled) {
-                _mapController.setLocationTrackingMode(NLocationTrackingMode.follow);
-              } else {
-                _mapController.setLocationTrackingMode(NLocationTrackingMode.none);
-              }
+              // 원 표시 제거
+              locationOverlay.setCircleRadius(0.0);
 
+              // 커스텀 마커 이미지를 사용해야 함
+              // 1. assets/images/ 폴더에 큰 크기의 내 위치 아이콘을 추가해야 함 (예: big_location_marker.png)
+              // 2. pubspec.yaml 파일에 해당 에셋 경로 추가 필요
 
-
+              // 큰 크기의 커스텀 이미지로 설정 (assets에 이미지 추가 필요)
+              locationOverlay.setIcon(NOverlayImage.fromAssetImage('assets/images/big-location-marker.svg'));
             },
           ),
 
@@ -509,20 +473,6 @@ class _NaverMapScreenState extends State<NaverMapScreen> with SingleTickerProvid
                 color: Colors.white,
               ),
               mini: true,
-            ),
-          ),
-          Positioned(
-            right: 16,
-            bottom: _isListExpanded ? 300 : 66, // 목록 토글 버튼보다 위에 배치
-            child: FloatingActionButton(
-              onPressed: _toggleMyLocation,
-              backgroundColor: _isMyLocationEnabled ? Color(0xFF388E3C) : Colors.white,
-              child: Icon(
-                Icons.my_location,
-                color: _isMyLocationEnabled ? Colors.white : Color(0xFF388E3C),
-              ),
-              mini: true,
-              elevation: 3,
             ),
           ),
 
