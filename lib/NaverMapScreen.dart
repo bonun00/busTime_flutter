@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:stomp_dart_client/stomp_dart_client.dart';
 import 'package:permission_handler/permission_handler.dart';
+import '../services/BusApiService.dart';
+
 
 class NaverMapScreen extends StatefulWidget {
   @override
@@ -20,7 +22,8 @@ class _NaverMapScreenState extends State<NaverMapScreen> with SingleTickerProvid
   bool _isLoading = true;
   late AnimationController _animationController;
   bool _isListExpanded = true;
-
+  String _selectedRegion = 'masan'; // ✅ 추가: 기본 지역
+  final BusApiService _busApiService = BusApiService();  //
   @override
   void initState() {
     super.initState();
@@ -72,6 +75,64 @@ class _NaverMapScreenState extends State<NaverMapScreen> with SingleTickerProvid
     print("[DEBUG] STOMP 연결 시도 중...");
   }
 
+  void _subscribeToRegion(String region) {
+    if (_stompClient != null && _stompClient!.connected) {
+      _stompClient!.subscribe(
+        destination: '/topic/$region',
+        callback: (StompFrame frame) {
+          if (frame.body != null) {
+            try {
+              final decodedData = jsonDecode(frame.body!);
+              _updateBusData(decodedData);
+              setState(() {
+                _isLoading = false;
+              });
+            } catch (e) {
+              print("[ERROR] 데이터 파싱 에러: $e");
+              setState(() {
+                _isLoading = false;
+              });
+            }
+          } else {
+            print("[DEBUG] 수신된 데이터가 없습니다.");
+            setState(() {
+              _isLoading = false;
+            });
+          }
+        },
+      );
+
+      // ✅ 지역 요청 즉시 데이터 받기
+      _stompClient!.send(destination: '/app/$region', body: '');
+    }
+  }
+
+  void _onConnect(StompFrame frame) {
+    print("[DEBUG] STOMP 연결 성공: ${frame.headers}");
+    _subscribeToRegion(_selectedRegion);
+  }
+
+  void _changeRegion(String region) {
+    setState(() {
+      _selectedRegion = region;
+      _busMarkers.clear();
+      _busList.clear();
+      _isLoading = true;
+    });
+
+    _subscribeToRegion(region);
+    _fetchAndDisplayPath("TSB390000035", '마산');
+    // for (int i = 34; i < 207; i++) {
+    //   String paddedNumber = i.toString().padLeft(3, '0'); // 034, 035, ..., 206
+    //   String routeId = "TSB3900000$paddedNumber";
+    //   await _fetchAndDisplayPath(routeId, '칠원');
+    // }
+
+    setState(() {
+      _isLoading = false;
+    });
+  }
+
   void _showErrorSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -91,37 +152,9 @@ class _NaverMapScreenState extends State<NaverMapScreen> with SingleTickerProvid
     );
   }
 
-  void _onConnect(StompFrame frame) {
-    print("[DEBUG] STOMP 연결 성공: ${frame.headers}");
-
-    _stompClient!.subscribe(
-      destination: '/topic/chilwon',
-      callback: (StompFrame frame) {
-        if (frame.body != null) {
-          try {
-            final decodedData = jsonDecode(frame.body!);
-            _updateBusData(decodedData);
-            setState(() {
-              _isLoading = false;
-            });
-          } catch (e) {
-            print("[ERROR] 데이터 파싱 에러: $e");
-            setState(() {
-              _isLoading = false;
-            });
-          }
-        } else {
-          print("[DEBUG] 수신된 데이터가 없습니다.");
-          setState(() {
-            _isLoading = false;
-          });
-        }
-      },
-    );
-  }
-
   void _updateBusData(dynamic data) {
     List<dynamic> busLocations;
+
     if (data is List) {
       busLocations = data;
     } else if (data is Map && data['busLocations'] is List) {
@@ -142,6 +175,10 @@ class _NaverMapScreenState extends State<NaverMapScreen> with SingleTickerProvid
       String vehicleId = bus['vehicleId']?.toString() ?? 'unknown';
       String busNumber = bus['busNumber']?.toString() ?? '';
 
+
+      print("패치 시작"+bus['routeId']);
+      _fetchAndDisplayPath("TSB390000207",'마산');
+      print("패치끝");
       // 마커를 생성하고 버스 번호를 포함한 캡션 추가
       final marker = NMarker(
         id: vehicleId,
@@ -340,6 +377,71 @@ class _NaverMapScreenState extends State<NaverMapScreen> with SingleTickerProvid
     super.dispose();
   }
 
+
+  Future<void> _fetchAndDisplayPath(String routeId, String direction) async {
+    try {
+      List<dynamic> stopData = await _busApiService.fetchPath(routeId, direction);
+
+      Set<NMarker> stopMarkers = {};
+      for (var stop in stopData) {
+        double lat = stop['latitude'];
+        double lng = stop['longitude'];
+        String nodenm = stop['nodenm'];
+
+        final marker = NMarker(
+          id: stop['nodeid'],
+          position: NLatLng(lat, lng),
+          caption: NOverlayCaption(
+            text: nodenm,
+            textSize: 12,
+            color: Colors.black,
+            haloColor: Colors.white,
+          ),
+          icon: NOverlayImage.fromAssetImage('assets/images/big-location-marker.svg'),
+        );
+
+        stopMarkers.add(marker);
+      }
+
+      setState(() {
+        _mapController.clearOverlays();
+        _mapController.addOverlayAll(stopMarkers);
+      });
+    } catch (e) {
+      print("정류장 마커 표시 실패: $e");
+    }
+  }
+
+  // Future<void> _fetchAndDisplayPath(String routeId, String direction) async {
+  //   try {
+  //     // 경로 데이터를 서버에서 불러오기
+  //     List<dynamic> pathData = await _busApiService.fetchPath(routeId, direction);
+  //
+  //     // 경로 데이터를 폴리라인 좌표로 변환
+  //     List<NLatLng> pathCoordinates = [];
+  //     for (var point in pathData) {
+  //       pathCoordinates.add(NLatLng(point[0], point[1]));  // [latitude, longitude] 배열
+  //     }
+  //
+  //     // 경로를 폴리라인으로 지도에 표시
+  //     NPolylineOverlay pathOverlay = NPolylineOverlay(
+  //       id: "route_path_$routeId",  // 고유한 경로 ID
+  //       coords: pathCoordinates,  // 경로 좌표 리스트
+  //       color: Colors.blue,  // 경로 색상
+  //       width: 5,  // 경로의 두께
+  //     );
+  //
+  //     // 지도에 경로 추가
+  //     if (_mapController != null) {
+  //       _mapController.addOverlay(pathOverlay);  // NPolylineOverlay를 추가
+  //     }
+  //   } catch (e) {
+  //     print("[ERROR] 경로 데이터를 불러오는 중 오류 발생: $e");
+  //   }
+  // }
+
+
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -363,8 +465,8 @@ class _NaverMapScreenState extends State<NaverMapScreen> with SingleTickerProvid
             ),
             SizedBox(width: 10),
             Text(
-              '실시간 버스 위치',
-              style: TextStyle(
+              '실시간 버스'
+              ,style: TextStyle(
                 color: Colors.black87,
                 fontWeight: FontWeight.bold,
                 fontSize: 18,
@@ -373,6 +475,14 @@ class _NaverMapScreenState extends State<NaverMapScreen> with SingleTickerProvid
           ],
         ),
         actions: [
+          TextButton(
+            onPressed: () => _changeRegion('masan'),
+            child: Text('마산', style: TextStyle(color: _selectedRegion == 'masan' ? Colors.green[800] : Colors.grey)),
+          ),
+          TextButton(
+            onPressed: () => _changeRegion('chilwon'),
+            child: Text('칠원', style: TextStyle(color: _selectedRegion == 'chilwon' ? Colors.green[800] : Colors.grey)),
+          ),
           IconButton(
             icon: Icon(
               Icons.refresh,

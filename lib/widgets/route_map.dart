@@ -22,39 +22,40 @@ class RouteMapWidget extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(20), // 패딩 증가 (16→20)
           child: Row(
             children: [
               Container(
-                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6), // 패딩 증가
                 decoration: BoxDecoration(
                   color: Colors.blue[700],
-                  borderRadius: BorderRadius.circular(4),
+                  borderRadius: BorderRadius.circular(6), // 모서리 둥글기 증가
                 ),
                 child: Text(
                   '$busNumber번',
                   style: TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
+                    fontSize: 18, // 글자 크기 증가
                   ),
                 ),
               ),
-              SizedBox(width: 8),
+              SizedBox(width: 12), // 간격 증가
               Text(
                 '전체 노선도',
                 style: TextStyle(
-                  fontSize: 18,
+                  fontSize: 24, // 글자 크기 증가 (18→24)
                   fontWeight: FontWeight.bold,
                 ),
               ),
             ],
           ),
         ),
-        Divider(),
+        Divider(thickness: 1.5), // 구분선 두께 증가
         Expanded(
           child: SingleChildScrollView(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 20), // 패딩 증가 (16→20)
               child: _buildRouteTimeline(),
             ),
           ),
@@ -84,20 +85,20 @@ class RouteMapWidget extends StatelessWidget {
             : Colors.grey[600];  // 일반 정류장은 회색
 
         return Container(
-          margin: EdgeInsets.only(bottom: isLastStop ? 0 : 8),
+          margin: EdgeInsets.only(bottom: isLastStop ? 0 : 12), // 마진 증가 (8→12)
           child: IntrinsicHeight(
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // 왼쪽 타임라인 부분
                 Container(
-                  width: 24,
+                  width: 30, // 너비 증가 (24→30)
                   child: Column(
                     children: [
                       // 정류장 점
                       Container(
-                        width: 16,
-                        height: 16,
+                        width: 20, // 크기 증가 (16→20)
+                        height: 20, // 크기 증가 (16→20)
                         decoration: BoxDecoration(
                           color: stopColor,
                           shape: BoxShape.circle,
@@ -106,7 +107,7 @@ class RouteMapWidget extends StatelessWidget {
                             width: 2,
                           ),
                           boxShadow: isSelected
-                              ? [BoxShadow(color: stopColor!.withOpacity(0.4), blurRadius: 4, spreadRadius: 1)]
+                              ? [BoxShadow(color: stopColor!.withOpacity(0.4), blurRadius: 6, spreadRadius: 2)] // 그림자 효과 증가
                               : null,
                         ),
                       ),
@@ -114,7 +115,7 @@ class RouteMapWidget extends StatelessWidget {
                       if (!isLastStop)
                         Expanded(
                           child: Container(
-                            width: 2,
+                            width: 3, // 너비 증가 (2→3)
                             margin: EdgeInsets.symmetric(vertical: 4),
                             color: Colors.grey[300],
                           ),
@@ -126,14 +127,14 @@ class RouteMapWidget extends StatelessWidget {
                 // 오른쪽 정류장 정보 부분
                 Expanded(
                   child: Container(
-                    margin: EdgeInsets.only(left: 8, bottom: 16),
-                    padding: EdgeInsets.all(12),
+                    margin: EdgeInsets.only(left: 10, bottom: 20), // 마진 증가 (8,16→10,20)
+                    padding: EdgeInsets.all(16), // 패딩 증가 (12→16)
                     decoration: BoxDecoration(
                       color: isSelected ? stopColor!.withOpacity(0.1) : Colors.grey[50],
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(10), // 모서리 둥글기 증가 (8→10)
                       border: Border.all(
                         color: isSelected ? stopColor! : Colors.grey[200]!,
-                        width: isSelected ? 1.5 : 1,
+                        width: isSelected ? 2 : 1.5, // 테두리 두께 증가
                       ),
                     ),
                     child: Column(
@@ -147,30 +148,30 @@ class RouteMapWidget extends StatelessWidget {
                                 stopName,
                                 style: TextStyle(
                                   fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                  fontSize: isSelected ? 16 : 15,
+                                  fontSize: isSelected ? 20 : 18, // 글자 크기 증가 (16,15→20,18)
                                   color: isSelected ? stopColor : Colors.black87,
                                 ),
                               ),
                             ),
                             if (isSelected)
                               Container(
-                                padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4), // 패딩 증가 (6,2→8,4)
                                 decoration: BoxDecoration(
                                   color: stopColor,
-                                  borderRadius: BorderRadius.circular(4),
+                                  borderRadius: BorderRadius.circular(6), // 모서리 둥글기 증가 (4→6)
                                 ),
                                 child: Text(
                                   isSelectedDeparture ? '출발' : '도착',
                                   style: TextStyle(
                                     color: Colors.white,
-                                    fontSize: 10,
+                                    fontSize: 14, // 글자 크기 증가 (10→14)
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
                               ),
                           ],
                         ),
-                        SizedBox(height: 4),
+                        SizedBox(height: 8), // 간격 증가 (4→8)
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
@@ -178,15 +179,15 @@ class RouteMapWidget extends StatelessWidget {
                               children: [
                                 Icon(
                                   Icons.access_time,
-                                  size: 14,
+                                  size: 18, // 아이콘 크기 증가 (14→18)
                                   color: Colors.grey[600],
                                 ),
-                                SizedBox(width: 4),
+                                SizedBox(width: 6), // 간격 증가 (4→6)
                                 Text(
                                   '도착시간: $arrivalTime',
                                   style: TextStyle(
                                     color: Colors.grey[700],
-                                    fontSize: 13,
+                                    fontSize: 16, // 글자 크기 증가 (13→16)
                                   ),
                                 ),
                               ],
@@ -195,16 +196,17 @@ class RouteMapWidget extends StatelessWidget {
                             // 정류장 번호가 있다면 표시
                             if (stop['stopId'] != null)
                               Container(
-                                padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4), // 패딩 증가 (6,2→8,4)
                                 decoration: BoxDecoration(
                                   color: Colors.grey[200],
-                                  borderRadius: BorderRadius.circular(4),
+                                  borderRadius: BorderRadius.circular(6), // 모서리 둥글기 증가 (4→6)
                                 ),
                                 child: Text(
                                   '#${stop['stopId']}',
                                   style: TextStyle(
                                     color: Colors.grey[700],
-                                    fontSize: 11,
+                                    fontSize: 30, // 글자 크기 증가 (11→14)
+                                    fontWeight: FontWeight.w500, // 글자 두께 약간 증가
                                   ),
                                 ),
                               ),

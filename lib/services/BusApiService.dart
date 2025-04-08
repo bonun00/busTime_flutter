@@ -1,5 +1,5 @@
 import 'package:dio/dio.dart';
-
+import 'dart:convert';
 class BusApiService {
   final Dio _dio = Dio();
 
@@ -7,11 +7,40 @@ class BusApiService {
   // 📌 iOS Simulator -> 127.0.0.1 사용
   static const String _baseUrl = "http://10.0.2.2:1111/bus";
 
+
+ // JSON 파싱을 위해 필요
+  Future<List<dynamic>> fetchPath(String routeId, String direction) async {
+    try {
+      // 요청 전에 URL과 파라미터 확인
+      print("Request URL: $_baseUrl/path?route_id=$routeId&direction=$direction");
+
+      Response response = await _dio.get("$_baseUrl/path",
+          queryParameters: {"route_id": routeId, "direction": direction});
+
+      // 서버 응답이 정상적인지 출력
+      print("Response data: ${response.data}");
+
+      // 서버에서 받은 데이터에서 pathJson을 가져와 파싱
+      String pathJson = response.data[0]['pathJson'];
+      print("Path JSON: $pathJson");
+
+      // JSON 파싱하여 List<List<double>> 형식으로 변환
+      List<dynamic> pathData = jsonDecode(pathJson);
+      return pathData;
+    } catch (e) {
+      print("버스경로 에러 발생: $e");
+      return [];
+    }
+  }
+
+
+
+
   // ✅ 마산 도착 시간 조회
   Future<List<dynamic>> fetchMasanTimes(String busNumber,
       String stopName) async {
     try {
-      Response response = await _dio.get("$_baseUrl/Masan-times",
+      Response response = await _dio.get("$_baseUrl/masan-times",
           queryParameters: {"busNumber": busNumber, "stopName": stopName});
 
       return response.data;
@@ -123,7 +152,7 @@ class BusApiService {
     }
   }
 
-  // [2] 칠원 노선: 출발/도착 정류장으로 시간표 조회
+  //////// [2] 칠원 노선: 출발/도착 정류장으로 시간표 조회
   //    응답도 List<Map<String,dynamic>> 라고 가정
   Future<List<Map<String, dynamic>>> fetchChilwonRouteSchedules(
       String departureStopId, String arrivalStopId) async {

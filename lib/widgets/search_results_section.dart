@@ -634,7 +634,7 @@ class _SearchResultsSectionState extends State<SearchResultsSection> {
                 Expanded(
                   flex: 2,
                   child: Text(
-                    '${widget.selectedDeparture ?? "?"} 출발',
+                    '${(widget.selectedDeparture ?? "?").replaceAll(' ', '')} 출발',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       color: Colors.grey[800],
@@ -644,7 +644,7 @@ class _SearchResultsSectionState extends State<SearchResultsSection> {
                 Expanded(
                   flex: 2,
                   child: Text(
-                    '${widget.selectedArrival ?? "?"} 도착',
+                    '${(widget.selectedArrival ?? "?").replaceAll(' ', '')} 도착',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       color: Colors.grey[800],
@@ -716,6 +716,7 @@ class _SearchResultsSectionState extends State<SearchResultsSection> {
                                 style: TextStyle(
                                   fontWeight: isUpcoming ? FontWeight.bold : FontWeight.normal,
                                   fontSize: 15,
+                                  color:Colors.black
                                 ),
                               ),
                               SizedBox(width: 6),
@@ -744,6 +745,7 @@ class _SearchResultsSectionState extends State<SearchResultsSection> {
                             style: TextStyle(
                               fontWeight: isUpcoming ? FontWeight.bold : FontWeight.normal,
                               fontSize: 15,
+                              color: Colors.black
                             ),
                           ),
                         ),
@@ -775,21 +777,21 @@ class _SearchResultsSectionState extends State<SearchResultsSection> {
           ),
 
           // 페이징 또는 더 보기 버튼 (선택적)
-          if (filteredSchedules.length > 10)
-            Container(
-              alignment: Alignment.center,
-              padding: EdgeInsets.symmetric(vertical: 12),
-              child: TextButton.icon(
-                onPressed: () {
-                  // 더 보기 동작
-                },
-                icon: Icon(Icons.expand_more, size: 18),
-                label: Text('더 보기'),
-                style: TextButton.styleFrom(
-                  foregroundColor: themeColor,
-                ),
-              ),
-            ),
+          // if (filteredSchedules.length > 10)
+          //   Container(
+          //     alignment: Alignment.center,
+          //     padding: EdgeInsets.symmetric(vertical: 12),
+          //     child: TextButton.icon(
+          //       onPressed: () {
+          //         // 더 보기 동작
+          //       },
+          //       icon: Icon(Icons.expand_more, size: 18),
+          //       label: Text('더 보기'),
+          //       style: TextButton.styleFrom(
+          //         foregroundColor: themeColor,
+          //       ),
+          //     ),
+          //   ),
         ],
       ),
     );

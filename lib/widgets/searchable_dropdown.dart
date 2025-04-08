@@ -73,12 +73,12 @@ class _SearchableDropdownState extends State<SearchableDropdown> {
             });
           },
           child: Container(
-            padding: EdgeInsets.symmetric(vertical: 8),
+            padding: EdgeInsets.symmetric(vertical: 12), // 패딩 증가 (8→12)
             decoration: BoxDecoration(
               border: Border(
                 bottom: BorderSide(
                   color: Colors.grey.shade300,
-                  width: 1.0,
+                  width: 1.5, // 경계선 두께 증가 (1.0→1.5)
                 ),
               ),
             ),
@@ -86,46 +86,49 @@ class _SearchableDropdownState extends State<SearchableDropdown> {
               children: [
                 Expanded(
                   child: Text(
-                    widget.value ?? widget.hint,
+                    (widget.value ?? widget.hint).replaceAll(' ', ''),
                     style: TextStyle(
                       color: widget.value == null ? Colors.grey.shade600 : Colors.black,
-                      fontSize: 16,
+                      fontSize: 18, // 글자 크기 증가 (16→18)
                     ),
                   ),
                 ),
                 Icon(
                   _isDropdownOpen ? Icons.arrow_drop_up : Icons.arrow_drop_down,
                   color: widget.iconColor,
+                  size: 28, // 아이콘 크기 증가 (기본→28)
                 ),
               ],
             ),
           ),
         ),
         if (_isDropdownOpen) ...[
-          SizedBox(height: 8),
+          SizedBox(height: 12), // 간격 증가 (8→12)
           Container(
-            padding: EdgeInsets.symmetric(horizontal: 8),
+            padding: EdgeInsets.symmetric(horizontal: 12), // 패딩 증가 (8→12)
             decoration: BoxDecoration(
               color: Colors.grey.shade100,
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: BorderRadius.circular(6), // 모서리 둥글기 증가 (4→6)
             ),
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
                 hintText: '검색...',
                 border: InputBorder.none,
-                icon: Icon(Icons.search, size: 20),
-                contentPadding: EdgeInsets.symmetric(vertical: 8),
+                icon: Icon(Icons.search, size: 24), // 아이콘 크기 증가 (20→24)
+                contentPadding: EdgeInsets.symmetric(vertical: 12), // 패딩 증가 (8→12)
+                hintStyle: TextStyle(fontSize: 18), // 힌트 텍스트 크기 증가
               ),
+              style: TextStyle(fontSize: 18), // 입력 텍스트 크기 증가
               onChanged: _filterItems,
             ),
           ),
-          SizedBox(height: 8),
+          SizedBox(height: 12), // 간격 증가 (8→12)
           Container(
-            constraints: BoxConstraints(maxHeight: 200),
+            constraints: BoxConstraints(maxHeight: 250), // 최대 높이 증가 (200→250)
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: BorderRadius.circular(6), // 모서리 둥글기 증가 (4→6)
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withOpacity(0.1),
@@ -152,11 +155,12 @@ class _SearchableDropdownState extends State<SearchableDropdown> {
                     });
                   },
                   child: Container(
-                    padding: EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                    padding: EdgeInsets.symmetric(vertical: 16, horizontal: 18), // 패딩 증가 (12,16→16,18)
                     color: isSelected ? Colors.grey.shade200 : Colors.transparent,
                     child: Text(
-                      item,
+                      item.replaceAll(' ', ''),
                       style: TextStyle(
+                        fontSize: 18, // 글자 크기 증가 (기본→18)
                         fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                         color: isSelected ? widget.iconColor : Colors.black,
                       ),
