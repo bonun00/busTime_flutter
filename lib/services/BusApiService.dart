@@ -8,24 +8,32 @@ class BusApiService {
   static const String _baseUrl = "http://10.0.2.2:1111/bus";
 
 
- // JSON 파싱을 위해 필요
-  Future<List<dynamic>> fetchPath(String routeId, String direction) async {
+  Future<List<dynamic>> fetchPath(String direction) async {
     try {
-      // 요청 전에 URL과 파라미터 확인
-      print("Request URL: $_baseUrl/path?route_id=$routeId&direction=$direction");
+
 
       Response response = await _dio.get("$_baseUrl/path",
-          queryParameters: {"route_id": routeId, "direction": direction});
+          queryParameters: { "direction": direction});
 
       // 서버 응답이 정상적인지 출력
-      print("Response data: ${response.data}");
+      final List<dynamic> pathData = response.data;
+      return pathData;
+    } catch (e) {
+      print("버스경로 에러 발생: $e");
+      return [];
+    }
+  }
 
-      // 서버에서 받은 데이터에서 pathJson을 가져와 파싱
-      String pathJson = response.data[0]['pathJson'];
-      print("Path JSON: $pathJson");
 
-      // JSON 파싱하여 List<List<double>> 형식으로 변환
-      List<dynamic> pathData = jsonDecode(pathJson);
+  Future<List<dynamic>> fetchStopTime(String nodeId) async {
+    try {
+
+
+      Response response = await _dio.get("$_baseUrl/arrival",
+          queryParameters: { "nodeId": nodeId});
+
+      // 서버 응답이 정상적인지 출력
+      final List<dynamic> pathData = response.data;
       return pathData;
     } catch (e) {
       print("버스경로 에러 발생: $e");

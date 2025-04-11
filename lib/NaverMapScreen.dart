@@ -24,6 +24,64 @@ class _NaverMapScreenState extends State<NaverMapScreen> with SingleTickerProvid
   bool _isListExpanded = true;
   String _selectedRegion = 'masan'; // ✅ 추가: 기본 지역
   final BusApiService _busApiService = BusApiService();  //
+  Set<NMarker> _stopMarkers = {};
+// 검색 관련 변수
+  final TextEditingController _searchController = TextEditingController();
+  bool _isSearching = false;
+  List<dynamic> _searchResults = [];
+  List<dynamic> _allStops = []; // 모든 정류장 데이터를 저장
+
+  // 버스 목록 패널 크기 조절 관련 변수
+  double _busPanelHeight = 250.0; // 초기 높이
+  double _minPanelHeight = 60.0;  // 최소 높이
+  double _maxPanelHeight = 500.0; // 최대 높이
+  bool _isDragging = false;       // 드래그 중인지 여부
+
+
+// 정류장 검색 메서드
+  void _searchStops(String query) {
+    if (query.isEmpty) {
+      setState(() {
+        _searchResults = [];
+        _isSearching = false;
+      });
+      return;
+    }
+
+    setState(() {
+      _isSearching = true;
+      _searchResults = _allStops.where((stop) {
+        final nodeNm = stop['nodeNm']?.toString().toLowerCase() ?? '';
+        return nodeNm.contains(query.toLowerCase());
+      }).toList();
+    });
+  }
+
+// 검색 결과에서 정류장 선택 메서드
+  void _selectSearchedStop(dynamic stop) {
+    double lat = stop['latitude'];
+    double lng = stop['longitude'];
+    String nodeNm = stop['nodeNm'] ?? '';
+    String nodeId = stop['nodeId'] ?? '';
+
+    // 검색 UI 닫기
+    setState(() {
+      _isSearching = false;
+      _searchController.clear();
+      _searchResults = [];
+    });
+
+    // 선택한 정류장으로 카메라 이동
+    _moveCameraTo(lat, lng);
+
+    // 선택한 정류장 강조 표시
+    _updateBorderOverlay(lat, lng);
+
+    // 해당 정류장의 도착 정보 보여주기
+    _busApiService.fetchStopTime(nodeId).then((arrivalInfo) {
+      _showArrivalBottomSheet(context, nodeNm, arrivalInfo);
+    });
+  }
   @override
   void initState() {
     super.initState();
@@ -32,12 +90,34 @@ class _NaverMapScreenState extends State<NaverMapScreen> with SingleTickerProvid
       vsync: this,
       duration: Duration(milliseconds: 300),
     );
+    // _fetchAndDisplayPath(_selectedRegion == 'masan' ? '마산' : '칠원');
     _requestLocationPermission();
   }
 
   // 위치 권한 요청 메서드
   Future<void> _requestLocationPermission() async {
     var status = await Permission.location.request();
+  }
+
+  void _renderAllMarkers() async {
+    if (_mapController == null) return;
+
+    if (_stopMarkers.isEmpty && _busMarkers.isEmpty) {
+      print("⛔ 마커가 없어서 렌더링하지 않음");
+      return;
+    }
+
+    print("🟢 정류장 마커 수: ${_stopMarkers.length}");
+    print("🟡 버스 마커 수: ${_busMarkers.length}");
+
+    // await _mapController.clearOverlays();
+
+    // 리스트를 Set으로 변환해서 전달
+    await _mapController.addOverlayAll({..._stopMarkers, ..._busMarkers});
+
+    if (_selectedCircleOverlay != null) {
+      await _mapController.addOverlay(_selectedCircleOverlay!);
+    }
   }
 
   void _connectStomp() {
@@ -106,6 +186,21 @@ class _NaverMapScreenState extends State<NaverMapScreen> with SingleTickerProvid
       _stompClient!.send(destination: '/app/$region', body: '');
     }
   }
+  // 패널 높이 조절 메서드
+  void _updatePanelHeight(double delta) {
+    setState(() {
+      _busPanelHeight = (_busPanelHeight - delta).clamp(_minPanelHeight, _maxPanelHeight);
+
+      // 높이에 따라 목록 확장/축소 상태 업데이트
+      if (_busPanelHeight <= _minPanelHeight + 30) {
+        _isListExpanded = false;
+        _animationController.reverse();
+      } else {
+        _isListExpanded = true;
+        _animationController.forward();
+      }
+    });
+  }
 
   void _onConnect(StompFrame frame) {
     print("[DEBUG] STOMP 연결 성공: ${frame.headers}");
@@ -116,17 +211,13 @@ class _NaverMapScreenState extends State<NaverMapScreen> with SingleTickerProvid
     setState(() {
       _selectedRegion = region;
       _busMarkers.clear();
+      _stopMarkers.clear();
       _busList.clear();
       _isLoading = true;
     });
 
     _subscribeToRegion(region);
-    _fetchAndDisplayPath("TSB390000035", '마산');
-    // for (int i = 34; i < 207; i++) {
-    //   String paddedNumber = i.toString().padLeft(3, '0'); // 034, 035, ..., 206
-    //   String routeId = "TSB3900000$paddedNumber";
-    //   await _fetchAndDisplayPath(routeId, '칠원');
-    // }
+    _fetchAndDisplayPath(region == 'masan' ? '마산' : '칠원');
 
     setState(() {
       _isLoading = false;
@@ -176,9 +267,6 @@ class _NaverMapScreenState extends State<NaverMapScreen> with SingleTickerProvid
       String busNumber = bus['busNumber']?.toString() ?? '';
 
 
-      print("패치 시작"+bus['routeId']);
-      _fetchAndDisplayPath("TSB390000207",'마산');
-      print("패치끝");
       // 마커를 생성하고 버스 번호를 포함한 캡션 추가
       final marker = NMarker(
         id: vehicleId,
@@ -207,14 +295,8 @@ class _NaverMapScreenState extends State<NaverMapScreen> with SingleTickerProvid
     setState(() {
       _busMarkers = newMarkers;
     });
+    _renderAllMarkers();
 
-    if (_mapController != null) {
-      _mapController.clearOverlays();
-      _mapController.addOverlayAll(_busMarkers);
-      if (_selectedCircleOverlay != null) {
-        _mapController.addOverlay(_selectedCircleOverlay!);
-      }
-    }
   }
 
   void _showBusInfo(dynamic bus) {
@@ -374,73 +456,118 @@ class _NaverMapScreenState extends State<NaverMapScreen> with SingleTickerProvid
   void dispose() {
     _stompClient?.deactivate();
     _animationController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
-
-  Future<void> _fetchAndDisplayPath(String routeId, String direction) async {
+  // 검색 결과 위젯
+  Widget _buildSearchResults() {
+    return _isSearching
+        ? Container(
+      color: Colors.white,
+      child: _searchResults.isEmpty
+          ? Center(
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: Text("검색 결과가 없습니다."),
+        ),
+      )
+          : ListView.builder(
+        itemCount: _searchResults.length,
+        itemBuilder: (context, index) {
+          final stop = _searchResults[index];
+          return ListTile(
+            leading: Icon(Icons.location_on, color: Color(0xFF388E3C)),
+            title: Text(stop['nodeNm'] ?? ''),
+            subtitle: Text("정류장 ID: ${stop['nodeId'] ?? ''}"),
+            onTap: () => _selectSearchedStop(stop),
+          );
+        },
+      ),
+    )
+        : SizedBox.shrink();
+  }
+  Future<void> _fetchAndDisplayPath(String direction) async {
     try {
-      List<dynamic> stopData = await _busApiService.fetchPath(routeId, direction);
+      List<dynamic> response = await _busApiService.fetchPath(direction);
 
-      Set<NMarker> stopMarkers = {};
-      for (var stop in stopData) {
+      if (response.isEmpty || _mapController == null) return;
+      // 모든 정류장 데이터 저장 (검색에 사용) - 이 줄 추가
+      setState(() {
+        _allStops = response;
+      });
+      Set<NMarker> newStopMarkers = {};
+
+      for (var stop in response) {
         double lat = stop['latitude'];
         double lng = stop['longitude'];
-        String nodenm = stop['nodenm'];
+        String nodeNm = stop['nodeNm'] ?? '';
+        String nodeId = stop['nodeId'] ?? '';
 
         final marker = NMarker(
-          id: stop['nodeid'],
+          id: nodeId,
           position: NLatLng(lat, lng),
           caption: NOverlayCaption(
-            text: nodenm,
+            text: nodeNm,
             textSize: 12,
             color: Colors.black,
             haloColor: Colors.white,
           ),
-          icon: NOverlayImage.fromAssetImage('assets/images/big-location-marker.svg'),
+          icon:await NOverlayImage.fromAssetImage('assets/images/big-location-marker.png',
+          ),
         );
-
-        stopMarkers.add(marker);
+        marker.setOnTapListener((overlay) async {
+          final arrivalInfo = await _busApiService.fetchStopTime(nodeId); // ✅ nodeId로 API 호출
+          _showArrivalBottomSheet(context, nodeNm, arrivalInfo); // ✅ 바텀시트에 보여주기
+        });
+        newStopMarkers.add(marker);
       }
 
       setState(() {
-        _mapController.clearOverlays();
-        _mapController.addOverlayAll(stopMarkers);
+        _stopMarkers = newStopMarkers;
       });
+
+      _renderAllMarkers();
     } catch (e) {
       print("정류장 마커 표시 실패: $e");
     }
   }
-
-  // Future<void> _fetchAndDisplayPath(String routeId, String direction) async {
-  //   try {
-  //     // 경로 데이터를 서버에서 불러오기
-  //     List<dynamic> pathData = await _busApiService.fetchPath(routeId, direction);
-  //
-  //     // 경로 데이터를 폴리라인 좌표로 변환
-  //     List<NLatLng> pathCoordinates = [];
-  //     for (var point in pathData) {
-  //       pathCoordinates.add(NLatLng(point[0], point[1]));  // [latitude, longitude] 배열
-  //     }
-  //
-  //     // 경로를 폴리라인으로 지도에 표시
-  //     NPolylineOverlay pathOverlay = NPolylineOverlay(
-  //       id: "route_path_$routeId",  // 고유한 경로 ID
-  //       coords: pathCoordinates,  // 경로 좌표 리스트
-  //       color: Colors.blue,  // 경로 색상
-  //       width: 5,  // 경로의 두께
-  //     );
-  //
-  //     // 지도에 경로 추가
-  //     if (_mapController != null) {
-  //       _mapController.addOverlay(pathOverlay);  // NPolylineOverlay를 추가
-  //     }
-  //   } catch (e) {
-  //     print("[ERROR] 경로 데이터를 불러오는 중 오류 발생: $e");
-  //   }
-  // }
-
-
+  void _showArrivalBottomSheet(BuildContext context, String stopName, List<dynamic> arrivalInfo) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) {
+        return Container(
+          padding: EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                "$stopName 정류장 도착 정보",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              SizedBox(height: 12),
+              arrivalInfo.isEmpty
+                  ? Text("도착 예정 버스가 없습니다.")
+                  : ListView.builder(
+                shrinkWrap: true,
+                itemCount: arrivalInfo.length,
+                itemBuilder: (context, index) {
+                  final info = arrivalInfo[index];
+                  return ListTile(
+                    leading: Icon(Icons.directions_bus, color: Colors.green),
+                    title: Text("${info['routeNo']}번 (${info['routeTp']})"),
+                    subtitle: Text("도착까지 ${info['arrTime']}분 | 남은 정류장 ${info['arrPrevStationCnt']}개"),
+                  );
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -508,19 +635,74 @@ class _NaverMapScreenState extends State<NaverMapScreen> with SingleTickerProvid
       ),
       body: Stack(
         children: [
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: Container(
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              color: Colors.white,
+              child: TextField(
+                controller: _searchController,
+                onChanged: _searchStops,
+                decoration: InputDecoration(
+                  hintText: '정류장 이름으로 검색',
+                  prefixIcon: Icon(Icons.search, color: Color(0xFF388E3C)),
+                  suffixIcon: _searchController.text.isEmpty
+                      ? null
+                      : IconButton(
+                    icon: Icon(Icons.clear),
+                    onPressed: () {
+                      _searchController.clear();
+                      setState(() {
+                        _isSearching = false;
+                        _searchResults = [];
+                      });
+                    },
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey[100],
+                  contentPadding: EdgeInsets.symmetric(vertical: 0),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(30),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // 검색 결과 (새로 추가)
+          Positioned(
+            top: 60,
+            left: 0,
+            right: 0,
+            bottom: _isSearching ? 0 : null,
+            child: _buildSearchResults(),
+          ),
           // 네이버 지도
-          NaverMap(
+          Positioned(
+              top: 60,  // 검색창 높이만큼 아래로
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: _isSearching
+                  ? Container() // 검색 중에는 지도 숨김
+                  : NaverMap(
             options: NaverMapViewOptions(
               initialCameraPosition: NCameraPosition(
                 target: NLatLng(35.3088233, 128.5185542),
                 zoom: 14,
               ),
               locationButtonEnable: true, // 네이버 맵의 기본 위치 버튼 활성화
-              contentPadding: EdgeInsets.only(bottom: _isListExpanded ? 250 : 60),
+              contentPadding: EdgeInsets.only(bottom: _isListExpanded ? _busPanelHeight : _minPanelHeight),
               scaleBarEnable: false,
             ),
-            onMapReady: (controller) {
+            onMapReady: (controller) async{
               _mapController = controller;
+              await _fetchAndDisplayPath(_selectedRegion == 'masan' ? '마산' : '칠원');
+
+              _renderAllMarkers();
               _mapController.addOverlayAll(_busMarkers);
               if (_selectedCircleOverlay != null) {
                 _mapController.addOverlay(_selectedCircleOverlay!);
@@ -529,14 +711,8 @@ class _NaverMapScreenState extends State<NaverMapScreen> with SingleTickerProvid
 
               // 원 표시 제거
               locationOverlay.setCircleRadius(0.0);
-
-              // 커스텀 마커 이미지를 사용해야 함
-              // 1. assets/images/ 폴더에 큰 크기의 내 위치 아이콘을 추가해야 함 (예: big_location_marker.png)
-              // 2. pubspec.yaml 파일에 해당 에셋 경로 추가 필요
-
-              // 큰 크기의 커스텀 이미지로 설정 (assets에 이미지 추가 필요)
-              locationOverlay.setIcon(NOverlayImage.fromAssetImage('assets/images/big-location-marker.svg'));
             },
+          ),
           ),
 
           // 로딩 표시기
@@ -571,87 +747,117 @@ class _NaverMapScreenState extends State<NaverMapScreen> with SingleTickerProvid
               ),
             ),
 
-          // 버스 목록 토글 버튼
-          Positioned(
-            right: 16,
-            bottom: _isListExpanded ? 250 : 16,
-            child: FloatingActionButton(
-              onPressed: _toggleListExpanded,
-              backgroundColor: Color(0xFF388E3C),
-              child: Icon(
-                _isListExpanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_up,
-                color: Colors.white,
-              ),
-              mini: true,
-            ),
-          ),
-
           // 버스 목록 패널
-          AnimatedPositioned(
-            duration: Duration(milliseconds: 300),
-            curve: Curves.easeInOut,
-            left: 0,
-            right: 0,
-            bottom: _isListExpanded ? 0 : -190,
-            height: 250,
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black26,
-                    blurRadius: 10,
-                    spreadRadius: 0,
-                    offset: Offset(0, -2),
-                  ),
-                ],
-              ),
-              child: Column(
-                children: [
-                  // 버스 목록 헤더
-                  Container(
-                    padding: EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [Color(0xFF388E3C), Color(0xFF2E7D32)],
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                      ),
-                      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          // 버스 목록 패널 (수정: 드래그 가능하게)
+          if (!_isSearching)
+            AnimatedPositioned(
+              duration: Duration(milliseconds: _isDragging ? 0 : 300), // 드래그 중에는 애니메이션 없음
+              curve: Curves.easeInOut,
+              left: 0,
+              right: 0,
+              bottom: _isListExpanded ? 0 : -(_busPanelHeight - _minPanelHeight),
+              height: _busPanelHeight,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black26,
+                      blurRadius: 10,
+                      spreadRadius: 0,
+                      offset: Offset(0, -2),
                     ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.directions_bus, color: Colors.white),
-                        SizedBox(width: 10),
-                        Text(
-                          "실시간 버스 목록",
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    // 드래그 핸들
+                    GestureDetector(
+                      onVerticalDragUpdate: (details) {
+                        setState(() {
+                          _isDragging = true;
+                          _updatePanelHeight(details.delta.dy);
+                        });
+                      },
+                      onVerticalDragEnd: (details) {
+                        setState(() {
+                          _isDragging = false;
+                          // 속도에 따라 패널 완전히 올리기/내리기
+                          if (details.velocity.pixelsPerSecond.dy > 200) {
+                            // 아래로 빠르게 스와이프 - 패널 줄이기
+                            _busPanelHeight = _minPanelHeight;
+                            _isListExpanded = false;
+                            _animationController.reverse();
+                          } else if (details.velocity.pixelsPerSecond.dy < -200) {
+                            // 위로 빠르게 스와이프 - 패널 키우기
+                            _busPanelHeight = _maxPanelHeight;
+                            _isListExpanded = true;
+                            _animationController.forward();
+                          }
+                        });
+                      },
+                      child: Container(
+                        width: double.infinity,
+                        padding: EdgeInsets.symmetric(vertical: 8),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [Color(0xFF388E3C), Color(0xFF2E7D32)],
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
                           ),
+                          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
                         ),
-                        Spacer(),
-                        Container(
-                          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            "${_busList.length}대 운행 중",
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF388E3C),
+                        child: Column(
+                          children: [
+                            // 드래그 핸들 인디케이터
+                            Container(
+                              width: 40,
+                              height: 5,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.3),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
                             ),
-                          ),
+                            SizedBox(height: 8),
+                            // 기존 헤더 내용
+                            Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 20),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.directions_bus, color: Colors.white),
+                                  SizedBox(width: 10),
+                                  Text(
+                                    "실시간 버스 목록",
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  Spacer(),
+                                  Container(
+                                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Text(
+                                      "${_busList.length}대 운행 중",
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF388E3C),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
-                  ),
-
                   // 버스 목록
                   Expanded(
                     child: _busList.isEmpty
