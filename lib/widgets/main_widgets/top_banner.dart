@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'searchable_dropdown.dart';
-import '../services/BusApiService.dart';
-import '../pages/main_page.dart';
+import '../main_widgets/searchable_dropdown.dart';
+import '../../services/BusApiService.dart';
+import '../../pages/main_page.dart';
 
 class TopBanner extends StatefulWidget {
   final String currentRouteType;

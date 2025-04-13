@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/BusApiService.dart';
-import '../widgets/top_banner.dart';
-import '../widgets/search_results_section.dart';
-import '../widgets/route_card.dart';
-import '../widgets/live_tracking.dart';
-import '../widgets/info_card.dart';
-import '../widgets/section_title.dart';
+import '../widgets/main_widgets/top_banner.dart';
+import '../widgets/main_widgets/search_results_section.dart';
+import '../widgets/main_widgets/route_card.dart';
+import '../widgets/main_widgets/live_tracking.dart';
+import '../widgets/main_widgets/info_card.dart';
+import '../widgets/main_widgets/section_title.dart';
 import '../pages/favorite_page.dart';
 
 class MainPage extends StatefulWidget {

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../services/BusApiService.dart';
+import '../../services/BusApiService.dart';
 
 // 1. 노선도 표시를 위한 위젯
 class RouteMapWidget extends StatelessWidget {

@@ -1,9 +1,11 @@
-import 'package:develoment/NaverMapScreen.dart';
+
 import 'package:flutter/material.dart';
 
 import 'pages/main_page.dart';
 import 'pages/chilwon_page.dart';
 import 'pages/masan_page.dart';
+import 'pages/map_page.dart';
+
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 
 

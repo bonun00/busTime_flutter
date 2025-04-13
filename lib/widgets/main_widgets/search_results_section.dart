@@ -1,9 +1,9 @@
 import 'package:develoment/services/BusApiService.dart';
 import 'package:flutter/material.dart';
-import 'section_title.dart';
-import 'route_map.dart';
-import '../models/bus_favorite.dart';
-import '../services/favorite_service.dart';
+import '../main_widgets/section_title.dart';
+import '../main_widgets/route_map.dart';
+import '../../models/bus_favorite.dart';
+import '../../services/favorite_service.dart';
 class SearchResultsSection extends StatefulWidget {
   final String currentRouteType;
   final String? selectedDeparture;
