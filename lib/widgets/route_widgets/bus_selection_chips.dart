@@ -52,16 +52,16 @@ class BusSelectionChips extends StatelessWidget {
             style: TextStyle(
               fontWeight: FontWeight.bold,
               color: Colors.grey[700],
-              fontSize: 18, // 글자 크기 추가
+              fontSize: 15, // 글자 크기 추가
             ),
           ),
-          SizedBox(width: 20), // 간격 증가 (16→20)
+          SizedBox(width: 10), // 간격 증가 (16→20)
           Expanded(
             child: Row(
               children: busNumbers.map((busNumber) {
                 bool isSelected = selectedBusNumbers.contains(busNumber);
                 return Padding(
-                  padding: EdgeInsets.only(right: 12), // 패딩 증가 (8→12)
+                  padding: EdgeInsets.only(right: 8), // 패딩 증가 (8→12)
                   child: FilterChip(
                     label: Text('$busNumber번'),
                     selected: isSelected,
@@ -79,7 +79,7 @@ class BusSelectionChips extends StatelessWidget {
                     elevation: 0,
                     pressElevation: 3, // 누를 때 그림자 효과 증가 (2→3)
                     shadowColor: Colors.black26,
-                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10), // 패딩 증가 (12,8→16,10)
+                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8), // 패딩 증가 (12,8→16,10)
                     shape: RoundedRectangleBorder( // 모서리 둥글기 추가
                       borderRadius: BorderRadius.circular(20),
                     ),

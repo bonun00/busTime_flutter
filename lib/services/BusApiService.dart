@@ -5,15 +5,14 @@ class BusApiService {
 
   // 📌 Android Emulator -> 10.0.2.2 사용
   // 📌 iOS Simulator -> 127.0.0.1 사용
-  static const String _baseUrl = "http://10.0.2.2:1111/bus";
+  static const String _baseUrl = "https://63c8-218-146-45-168.ngrok-free.app/bus";
 
 
-  Future<List<dynamic>> fetchPath(String direction) async {
+  Future<List<dynamic>> fetchPath() async {
     try {
 
 
-      Response response = await _dio.get("$_baseUrl/path",
-          queryParameters: { "direction": direction});
+      Response response = await _dio.get("$_baseUrl/path");
 
       // 서버 응답이 정상적인지 출력
       final List<dynamic> pathData = response.data;

@@ -1,15 +1,10 @@
-// main 화면 파일 (screens/naver_map_screen.dart)
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:permission_handler/permission_handler.dart';
-import '../widgets/map_widgets/stop_search_bar.dart';
-import '../widgets/map_widgets/bus_info_panel.dart';
-import '../widgets/map_widgets/bottom_sheets.dart';
 import '../widgets/map_widgets/map_marker.dart';
-import '../services/stomp_manager.dart';
+import '../widgets/map_widgets/stop_list_bottom_sheet.dart';
 import '../services/BusApiService.dart';
-// main 화면 파일 (screens/nave
 
 class NaverMapScreen extends StatefulWidget {
   @override
@@ -17,82 +12,39 @@ class NaverMapScreen extends StatefulWidget {
 }
 
 class _NaverMapScreenState extends State<NaverMapScreen> with SingleTickerProviderStateMixin {
-  StompManager _stompManager = StompManager();
   late NaverMapController _mapController;
-  Set<NMarker> _busMarkers = {};
   Set<NMarker> _stopMarkers = {};
-  List<dynamic> _busList = [];
   List<dynamic> _allStops = [];
-  List<dynamic> _searchResults = [];
   String? _selectedMarkerId;
   NCircleOverlay? _selectedCircleOverlay;
   bool _isLoading = true;
   late AnimationController _animationController;
-  bool _isListExpanded = true;
-  String _selectedRegion = 'masan';
   final BusApiService _busApiService = BusApiService();
-  final TextEditingController _searchController = TextEditingController();
-  bool _isSearching = false;
+  final GlobalKey<StopListBottomSheetState> _stopListBottomSheetKey = GlobalKey<StopListBottomSheetState>();
 
-  double _busPanelHeight = 250.0;
-  double _minPanelHeight = 60.0;
-  double _maxPanelHeight = 500.0;
-  bool _isDragging = false;
+  // 바텀시트 높이 관련 변수
+  double _bottomSheetHeight = 300.0;
+
+  // 스캐폴드 키 (바텀시트용)
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   @override
   void initState() {
     super.initState();
-    _connectStomp();
     _animationController = AnimationController(vsync: this, duration: Duration(milliseconds: 300));
     _requestLocationPermission();
   }
 
   Future<void> _requestLocationPermission() async {
     await Permission.location.request();
-  }
-
-  void _connectStomp() {
-    setState(() {
-      _isLoading = true;
-    });
-    _stompManager.connect(
-      region: _selectedRegion,
-      onBusDataReceived: _updateBusData,
-      onError: (msg) => _showErrorSnackBar(msg),
-      onConnected: () => setState(() => _isLoading = false),
-    );
-  }
-
-  void _changeRegion(String region) {
-    setState(() {
-      _selectedRegion = region;
-      _busMarkers.clear();
-      _stopMarkers.clear();
-      _busList.clear();
-      _isLoading = true;
-    });
-    _connectStomp();
-    _fetchAndDisplayPath(region == 'masan' ? '마산' : '칠원');
-  }
-
-  void _updateBusData(List<dynamic> buses) {
-    setState(() {
-      _busList = buses;
-      _busMarkers = buses.map((bus) => createBusMarker(bus, onTap: () {
-        setState(() => _selectedMarkerId = bus['vehicleId'].toString());
-        _moveCameraTo(double.parse(bus['latitude'].toString()), double.parse(bus['longitude'].toString()));
-        _updateBorderOverlay(double.parse(bus['latitude'].toString()), double.parse(bus['longitude'].toString()));
-        showBusInfoBottomSheet(context, bus);
-      })).toSet();
-    });
-    _renderAllMarkers();
+    setState(() => _isLoading = false);
   }
 
   void _renderAllMarkers() async {
     if (_mapController == null) return;
-    if (_stopMarkers.isEmpty && _busMarkers.isEmpty) return;
+    if (_stopMarkers.isEmpty) return;
     await _mapController.clearOverlays();
-    await _mapController.addOverlayAll({..._stopMarkers, ..._busMarkers});
+    await _mapController.addOverlayAll(_stopMarkers);
     if (_selectedCircleOverlay != null) {
       await _mapController.addOverlay(_selectedCircleOverlay!);
     }
@@ -110,51 +62,45 @@ class _NaverMapScreenState extends State<NaverMapScreen> with SingleTickerProvid
       id: "selected_circle",
       center: NLatLng(lat, lng),
       radius: 30,
-      color: Colors.red.withOpacity(0.3),
-      outlineColor: Colors.red,
+      color: Colors.blue.withOpacity(0.3),
+      outlineColor: Colors.blue,
       outlineWidth: 2,
     );
     _mapController.addOverlay(_selectedCircleOverlay!);
   }
 
-  void _searchStops(String query) {
-    print('🔍 검색어: $query');
-    print('🧾 전체 정류장 수: ${_allStops.length}');
-
-    if (query.isEmpty) {
-      setState(() {
-        _searchResults = [];
-        _isSearching = false;
-      });
-      return;
-    }
-
-    setState(() {
-      _isSearching = true;
-      _searchResults = _allStops.where((stop) {
-        final nodeNm = stop['nodeNm']?.toString().toLowerCase() ?? '';
-        return nodeNm.contains(query.toLowerCase());
-      }).toList();
-    });
-
-    print('✅ 검색 결과 수: ${_searchResults.length}');
-  }
-
   void _selectSearchedStop(dynamic stop) {
     double lat = stop['latitude'];
     double lng = stop['longitude'];
-    String nodeNm = stop['nodeNm'] ?? '';
     String nodeId = stop['nodeId'] ?? '';
-
+    String nodeNm = stop['nodeNm'] ?? '';
     setState(() {
-      _isSearching = false;
-      _searchController.clear();
-      _searchResults = [];
+      _selectedMarkerId = nodeId;
     });
+
+    // 바텀시트의 검색어를 설정하여 해당 정류장으로 스크롤
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _stopListBottomSheetKey.currentState?.setSearchQuery(nodeNm);
+    });
+
     _moveCameraTo(lat, lng);
     _updateBorderOverlay(lat, lng);
-    _busApiService.fetchStopTime(nodeId).then((arrivalInfo) {
-      showStopArrivalSheet(context, nodeNm, arrivalInfo);
+  }
+
+  // 도착 정보 가져오는 함수 (StopListBottomSheet에 전달)
+  Future<List<dynamic>> _fetchStopArrivalInfo(String nodeId) async {
+    try {
+      return await _busApiService.fetchStopTime(nodeId);
+    } catch (e) {
+      _showErrorSnackBar("도착 정보를 가져오는데 실패했습니다: $e");
+      throw e;
+    }
+  }
+
+  // 바텀시트 높이 변경 콜백
+  void _onBottomSheetHeightChanged(double height) {
+    setState(() {
+      _bottomSheetHeight = height;
     });
   }
 
@@ -177,112 +123,140 @@ class _NaverMapScreenState extends State<NaverMapScreen> with SingleTickerProvid
 
   @override
   void dispose() {
-    _stompManager.disconnect();
     _animationController.dispose();
-    _searchController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      key: _scaffoldKey,
       backgroundColor: Colors.white,
-      appBar: AppBar(
-        title: Text('실시간 버스', style: TextStyle(color: Colors.black)),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: Colors.black),
-          onPressed: () => Navigator.pop(context),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => _changeRegion('masan'),
-            child: Text('마산', style: TextStyle(color: _selectedRegion == 'masan' ? Colors.green[800] : Colors.grey)),
-          ),
-          TextButton(
-            onPressed: () => _changeRegion('chilwon'),
-            child: Text('칠원', style: TextStyle(color: _selectedRegion == 'chilwon' ? Colors.green[800] : Colors.grey)),
-          ),
-        ],
-      ),
-
       body: Stack(
         children: [
-          Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-          child: buildSearchBar(
-            context,
-            _searchController,
-            _searchResults,
-            _isSearching,
-            onSearchChanged: _searchStops,
-            onStopSelected: _selectSearchedStop,
-            onClear: () => _clearSearch(),
-          ),
-          ),
-
-          Positioned(
-            top: _isSearching ? 360 : 60, // 검색 결과 있을 땐 더 내려줌!
-            left: 0,
-            right: 0,
-            bottom: 0,
+          // 네이버 지도 (전체 화면 크기로 고정)
+          SizedBox.expand(
             child: NaverMap(
               options: NaverMapViewOptions(
                 initialCameraPosition: NCameraPosition(
                   target: NLatLng(35.3088233, 128.5185542),
                   zoom: 14,
                 ),
+                logoAlign: NLogoAlign.leftTop,
               ),
               onMapReady: (controller) async {
                 _mapController = controller;
-                await _fetchAndDisplayPath(_selectedRegion == 'masan' ? '마산' : '칠원');
+                // 맵 컨트롤러가 준비되면 정류장 데이터 가져오기
+                await _fetchAndDisplayPath();
               },
             ),
           ),
+
+          // 뒤로가기 버튼
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 10,
+            left: 16,
+            child: Container(
+              decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(30),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 6,
+                      offset: Offset(0, 2),
+                    )
+                  ]
+              ),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(30),
+                  onTap: () => Navigator.pop(context),
+                  child: Container(
+                    padding: EdgeInsets.all(8),
+                    child: Icon(Icons.arrow_back, color: Colors.black),
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // 바텀시트 - AnimatedContainer 사용하여 부드러운 애니메이션 구현
+          if (_allStops.isNotEmpty)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: AnimatedContainer(
+                duration: Duration(milliseconds: 300),
+                curve: Curves.easeInOut, // 부드러운 애니메이션 커브 적용
+                height: _bottomSheetHeight,
+                child: StopListBottomSheet(
+                  key: _stopListBottomSheetKey,
+                  allStops: _allStops,
+                  selectedMarkerId: _selectedMarkerId,
+                  onStopSelected: _selectSearchedStop,
+                  onRefresh: _fetchAndDisplayPath,
+                  isLoading: _isLoading,
+                  scaffoldKey: _scaffoldKey,
+                  fetchArrivalInfo: _fetchStopArrivalInfo,
+                  onHeightChanged: _onBottomSheetHeightChanged,
+                ),
+              ),
+            ),
+
           if (_isLoading)
-            Center(child: CircularProgressIndicator(color: Color(0xFF388E3C))),
-          if (!_isSearching)
-            BusListPanel(
-              busList: _busList,
-              selectedId: _selectedMarkerId,
-              onSelect: (bus) {
-                setState(() => _selectedMarkerId = bus['vehicleId']);
-                _moveCameraTo(double.parse(bus['latitude']), double.parse(bus['longitude']));
-                _updateBorderOverlay(double.parse(bus['latitude']), double.parse(bus['longitude']));
-              },
-            )
+            Center(child: CircularProgressIndicator(color: Color(0xFF2196F3))),
         ],
       ),
     );
   }
 
-  Future<void> _fetchAndDisplayPath(String direction) async {
+  Future<void> _fetchAndDisplayPath() async {
     try {
-      List<dynamic> response = await _busApiService.fetchPath(direction);
-      if (response.isEmpty || _mapController == null) return;
+      setState(() => _isLoading = true);
+      List<dynamic> response = await _busApiService.fetchPath();
+      if (response.isEmpty || _mapController == null) {
+        setState(() => _isLoading = false);
+        return;
+      }
+
       setState(() => _allStops = response);
+
       Set<NMarker> newStopMarkers = response.map((stop) {
         final marker = createStopMarker(stop, onTap: () async {
-          final arrivalInfo = await _busApiService.fetchStopTime(stop['nodeId']);
-          showStopArrivalSheet(context, stop['nodeNm'], arrivalInfo);
+          // 마커 선택 상태 업데이트
+          setState(() => _selectedMarkerId = stop['nodeId']);
+
+          // 카메라 이동 및 원형 오버레이 표시
+          _moveCameraTo(stop['latitude'], stop['longitude']);
+          _updateBorderOverlay(stop['latitude'], stop['longitude']);
+
+          // 바텀시트의 상태 업데이트
+          final String nodeNm = stop['nodeNm'] ?? '';
+
+          // 검색어 업데이트 전에 잠시 지연을 줌 (상태 업데이트가 안정화되도록)
+          Future.delayed(Duration(milliseconds: 100), () {
+            // 바텀시트의 검색어 업데이트
+            if (_stopListBottomSheetKey.currentState != null) {
+              _stopListBottomSheetKey.currentState?.setSearchQuery(nodeNm);
+            }
+          });
         });
         return marker;
       }).toSet();
-      setState(() => _stopMarkers = newStopMarkers);
+
+      setState(() {
+        _stopMarkers = newStopMarkers;
+        _isLoading = false;
+      });
+
       _renderAllMarkers();
     } catch (e) {
+      setState(() => _isLoading = false);
+      _showErrorSnackBar("정류장 정보를 가져오는데 실패했습니다: $e");
       print("정류장 마커 표시 실패: $e");
     }
-  }
-
-  void _clearSearch() {
-    setState(() {
-      _searchController.clear();
-      _isSearching = false;
-      _searchResults = [];
-    });
   }
 }
